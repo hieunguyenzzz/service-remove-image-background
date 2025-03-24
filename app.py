@@ -2,6 +2,7 @@ import os
 import io
 import hashlib
 import requests
+import torch
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
 import numpy as np
@@ -34,17 +35,55 @@ def generate_image_hash(image_url):
     """
     return hashlib.md5(image_url.encode()).hexdigest()
 
+def is_mps_available():
+    """
+    Check if MPS (Metal Performance Shaders) is available for M1 GPU acceleration.
+    
+    Returns:
+        bool: True if MPS is available, False otherwise
+    """
+    try:
+        if torch.backends.mps.is_available():
+            return True
+    except AttributeError:
+        # Older PyTorch versions might not have MPS
+        pass
+    return False
+
 def get_model():
     """
-    Lazily load and cache the image segmentation model.
+    Lazily load and cache the image segmentation model with GPU acceleration if available.
     
     Returns:
         pipeline: Hugging Face image segmentation model
     """
     if not hasattr(get_model, 'model'):
-        print("Loading RMBG-1.4 model...")
-        get_model.model = pipeline("image-segmentation", model="briaai/RMBG-1.4", trust_remote_code=True)
-        print("Model loaded successfully")
+        # Check for GPU availability
+        device = "mps" if is_mps_available() else "cpu"
+        
+        if device == "mps":
+            print("Loading RMBG-1.4 model on M1 GPU via MPS...")
+        else:
+            print("Loading RMBG-1.4 model on CPU (MPS not available)...")
+        
+        try:
+            get_model.model = pipeline(
+                "image-segmentation", 
+                model="briaai/RMBG-1.4", 
+                trust_remote_code=True,
+                device=device
+            )
+            print(f"Model loaded successfully on {device}")
+        except Exception as e:
+            print(f"Error loading model on {device}: {e}")
+            print("Falling back to CPU...")
+            get_model.model = pipeline(
+                "image-segmentation", 
+                model="briaai/RMBG-1.4", 
+                trust_remote_code=True
+            )
+            print("Model loaded successfully on CPU")
+    
     return get_model.model
 
 def download_image(image_url):
@@ -149,6 +188,6 @@ def test():
 
 # For local development only - this won't run when using gunicorn
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8082))
     print(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port) 
