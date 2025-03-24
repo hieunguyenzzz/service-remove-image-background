@@ -7,15 +7,14 @@ import rembg
 
 app = Flask(__name__)
 
-@app.route('/remove-background', methods=['POST'])
+@app.route('/remove-background', methods=['GET'])
 def process_image():
     try:
-        # Get image URL from request
-        data = request.json
-        if not data or 'image_url' not in data:
-            return jsonify({'error': 'Missing image_url parameter'}), 400
+        # Get image URL from query parameter
+        image_url = request.args.get('image')
+        if not image_url:
+            return jsonify({'error': 'Missing image parameter'}), 400
 
-        image_url = data['image_url']
         print(f"Processing image from URL: {image_url}")
         
         # Download the image directly using requests

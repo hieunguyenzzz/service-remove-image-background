@@ -30,15 +30,13 @@ python app.py
 
 ## API Usage
 
-The API exposes a single endpoint at `/remove-background` that accepts POST requests with a JSON body containing an `image_url` field.
+The API exposes a single endpoint at `/remove-background` that accepts GET requests with an `image` query parameter containing the URL of the image to process.
 
 ### Example with curl
 
 ```bash
-curl -X POST \
-  http://localhost:8080/remove-background \
-  -H 'Content-Type: application/json' \
-  -d '{"image_url": "https://example.com/furniture-image.jpg"}'
+curl -X GET \
+  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg"
 ```
 
 The API will return the processed image with a transparent background directly in the response (no need to save to a file). 
