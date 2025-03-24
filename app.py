@@ -12,6 +12,9 @@ app = Flask(__name__)
 
 # Configuration constants
 CACHE_DIR = os.path.join(os.getcwd(), 'image_cache')
+# Add image optimization settings
+DEFAULT_QUALITY = 95
+DEFAULT_MAX_SIZE = 2000
 
 def ensure_cache_directory():
     """
@@ -126,15 +129,54 @@ def process_image_background(input_image, model):
     result_image.putalpha(pillow_mask)
     return result_image
 
-def save_processed_image(result_image, cache_path):
+def optimize_image(image, max_size=DEFAULT_MAX_SIZE, quality=DEFAULT_QUALITY):
     """
-    Save processed image to cache.
+    Optimize image by resizing and compressing.
+    
+    Args:
+        image (Image): PIL Image to optimize
+        max_size (int): Maximum width or height
+        quality (int): JPEG quality (0-100)
+    
+    Returns:
+        Image: Optimized image
+    """
+    # Get current dimensions
+    width, height = image.size
+    
+    # Resize if image is larger than max_size
+    if width > max_size or height > max_size:
+        if width > height:
+            new_width = max_size
+            new_height = int(height * (max_size / width))
+        else:
+            new_height = max_size
+            new_width = int(width * (max_size / height))
+        
+        image = image.resize((new_width, new_height), Image.LANCZOS)
+    
+    return image
+
+def save_processed_image(result_image, cache_path, max_size=DEFAULT_MAX_SIZE, quality=DEFAULT_QUALITY):
+    """
+    Save processed image to cache with optimization.
     
     Args:
         result_image (Image): Processed image
         cache_path (str): Path to save the image
+        max_size (int): Maximum width or height
+        quality (int): PNG compression level (0-9)
     """
-    result_image.save(cache_path, format='PNG')
+    # Optimize the image
+    optimized_image = optimize_image(result_image, max_size)
+    
+    # Save with compression
+    optimized_image.save(
+        cache_path, 
+        format='PNG',
+        optimize=True,
+        compress_level=min(quality // 10, 9)  # Convert quality to PNG compress level (0-9)
+    )
 
 @app.route('/remove-background', methods=['GET'])
 def remove_background():
@@ -149,6 +191,10 @@ def remove_background():
         image_url = request.args.get('image')
         if not image_url:
             return jsonify({'error': 'Missing image parameter'}), 400
+            
+        # Get optimization parameters (optional)
+        max_size = request.args.get('max_size', DEFAULT_MAX_SIZE, type=int)
+        quality = request.args.get('quality', DEFAULT_QUALITY, type=int)
 
         # Ensure cache directory exists
         cache_dir = ensure_cache_directory()
@@ -167,12 +213,18 @@ def remove_background():
         model = get_model()
         result_image = process_image_background(input_image, model)
 
-        # Save processed image to cache
-        save_processed_image(result_image, cache_path)
+        # Save processed image to cache with optimization
+        save_processed_image(result_image, cache_path, max_size, quality)
 
         # Create memory buffer for output
         output_buffer = io.BytesIO()
-        result_image.save(output_buffer, format='PNG')
+        optimized_image = optimize_image(result_image, max_size)
+        optimized_image.save(
+            output_buffer, 
+            format='PNG',
+            optimize=True,
+            compress_level=min(quality // 10, 9)
+        )
         output_buffer.seek(0)
 
         return send_file(output_buffer, mimetype='image/png', download_name='transparent-image.png')
