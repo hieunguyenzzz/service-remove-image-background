@@ -62,7 +62,8 @@ def process_image():
 def test():
     return jsonify({'status': 'API is running'}), 200
 
+# For local development only - this won't run when using gunicorn
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print(f"Starting server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    app.run(host='0.0.0.0', port=port) 

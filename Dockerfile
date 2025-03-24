@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 # Expose the port
-EXPOSE 8080
+EXPOSE 80
 
-# Run the application
-CMD ["python", "app.py"] 
+# Run the application with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:80", "app:app"] 
