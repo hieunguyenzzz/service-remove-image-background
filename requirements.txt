@@ -1,0 +1,5 @@
+flask==2.2.3
+werkzeug==2.2.3
+rembg==2.0.49
+Pillow==10.0.0
+requests==2.31.0 
