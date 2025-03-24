@@ -1,6 +1,6 @@
 # Background Removal API
 
-A Flask API that removes backgrounds from furniture images using the rembg library.
+A Flask API that removes backgrounds from images using the Hugging Face RMBG-1.4 model, a state-of-the-art background removal solution.
 
 ## Running the API
 
@@ -35,29 +35,35 @@ The API exposes a single endpoint at `/remove-background` that accepts GET reque
 ### Parameters
 
 - `image` (required): URL of the image to process
-- `alpha_matting` (optional): Set to 'true' or 'false' to enable/disable alpha matting for shadow preservation (default: 'true')
-- `foreground_threshold` (optional): Alpha matting foreground threshold (0-255, default: 240)
-- `background_threshold` (optional): Alpha matting background threshold (0-255, default: 10)
-- `erode_size` (optional): Alpha matting erode size (default: 10)
 
 ### Example with curl
 
 ```bash
 # Basic usage
 curl -X GET \
-  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg"
-
-# With shadow preservation parameters
-curl -X GET \
-  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg&alpha_matting=true&foreground_threshold=240&background_threshold=10&erode_size=10"
+  "http://localhost:8080/remove-background?image=https://example.com/your-image.jpg"
 ```
 
-The API will return the processed image with a transparent background directly in the response (no need to save to a file).
+The API will return the processed image with a transparent background directly in the response (PNG format).
 
-### Tips for Shadow Preservation
+## About the RMBG-1.4 Model
 
-- Use `alpha_matting=true` to preserve shadows
-- Adjust `foreground_threshold` and `background_threshold` to fine-tune the shadow effect:
-  - Lower `foreground_threshold` to include more of the shadows
-  - Higher `background_threshold` to keep more shadow details
-- If shadows appear fragmented, try increasing `erode_size` 
+The API uses the BRIA RMBG-1.4 model from Hugging Face, which provides high-quality background removal capabilities. This model has been trained on a diverse dataset including:
+
+- General stock images
+- E-commerce product images
+- Gaming and advertising content
+- Images with people, animals, objects, and text
+
+The model handles a wide variety of image types and provides excellent segmentation quality.
+
+## Model Information
+
+- **Model**: [briaai/RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4)
+- **License**: Free for non-commercial use (commercial use requires a license from BRIA AI)
+- **Architecture**: Based on IS-Net with proprietary enhancements
+
+## Technical Notes
+
+- The first request may take longer as the model needs to be loaded into memory
+- For best performance, a system with GPU is recommended but not required 
