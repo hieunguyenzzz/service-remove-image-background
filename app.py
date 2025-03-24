@@ -56,11 +56,14 @@ def is_mps_available():
 def get_model():
     """
     Lazily load and cache the image segmentation model with GPU acceleration if available.
+    Uses a global model instance to avoid duplicate model loading across workers.
     
     Returns:
         pipeline: Hugging Face image segmentation model
     """
-    if not hasattr(get_model, 'model'):
+    global _model_instance
+    
+    if not hasattr(get_model, '_model_instance'):
         # Check for GPU availability
         device = "mps" if is_mps_available() else "cpu"
         
@@ -70,7 +73,7 @@ def get_model():
             print("Loading RMBG-1.4 model on CPU (MPS not available)...")
         
         try:
-            get_model.model = pipeline(
+            get_model._model_instance = pipeline(
                 "image-segmentation", 
                 model="briaai/RMBG-1.4", 
                 trust_remote_code=True,
@@ -80,14 +83,14 @@ def get_model():
         except Exception as e:
             print(f"Error loading model on {device}: {e}")
             print("Falling back to CPU...")
-            get_model.model = pipeline(
+            get_model._model_instance = pipeline(
                 "image-segmentation", 
                 model="briaai/RMBG-1.4", 
                 trust_remote_code=True
             )
             print("Model loaded successfully on CPU")
     
-    return get_model.model
+    return get_model._model_instance
 
 def download_image(image_url):
     """
@@ -115,7 +118,7 @@ def download_image(image_url):
 
 def process_image_background(input_image, model):
     """
-    Remove background from an image.
+    Remove background from an image with memory optimizations.
     
     Args:
         input_image (Image): PIL Image to process
@@ -124,9 +127,31 @@ def process_image_background(input_image, model):
     Returns:
         Image: Processed image with transparent background
     """
+    # Resize large images before processing to reduce memory usage
+    max_processing_size = 1500
+    original_size = input_image.size
+    resized = False
+    
+    if original_size[0] > max_processing_size or original_size[1] > max_processing_size:
+        # Calculate aspect ratio
+        ratio = min(max_processing_size / original_size[0], max_processing_size / original_size[1])
+        new_size = (int(original_size[0] * ratio), int(original_size[1] * ratio))
+        input_image = input_image.resize(new_size, Image.LANCZOS)
+        resized = True
+    
+    # Process the image
     pillow_mask = model(input_image, return_mask=True)
     result_image = input_image.convert("RGBA")
     result_image.putalpha(pillow_mask)
+    
+    # Resize back to original if needed
+    if resized:
+        result_image = result_image.resize(original_size, Image.LANCZOS)
+    
+    # Force garbage collection after processing
+    import gc
+    gc.collect()
+    
     return result_image
 
 def optimize_image(image, max_size=DEFAULT_MAX_SIZE, quality=DEFAULT_QUALITY):
@@ -181,7 +206,7 @@ def save_processed_image(result_image, cache_path, max_size=DEFAULT_MAX_SIZE, qu
 @app.route('/remove-background', methods=['GET'])
 def remove_background():
     """
-    Remove background from an image, with caching.
+    Remove background from an image, with caching and memory optimization.
     
     Returns:
         send_file or JSON response
@@ -210,8 +235,15 @@ def remove_background():
 
         # Download and process image
         input_image = download_image(image_url)
+        
+        # Process in a memory-controlled way
         model = get_model()
         result_image = process_image_background(input_image, model)
+        
+        # Clear references to the large input image
+        del input_image
+        import gc
+        gc.collect()
 
         # Save processed image to cache with optimization
         save_processed_image(result_image, cache_path, max_size, quality)
@@ -226,6 +258,11 @@ def remove_background():
             compress_level=min(quality // 10, 9)
         )
         output_buffer.seek(0)
+        
+        # Clear references to large images
+        del result_image
+        del optimized_image
+        gc.collect()
 
         return send_file(output_buffer, mimetype='image/png', download_name='transparent-image.png')
     
