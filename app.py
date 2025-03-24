@@ -1,5 +1,6 @@
 import os
 import io
+import hashlib
 import requests
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
@@ -8,54 +9,133 @@ from transformers import pipeline
 
 app = Flask(__name__)
 
-# Initialize the Hugging Face pipeline once for reuse
+# Configuration constants
+CACHE_DIR = os.path.join(os.getcwd(), 'image_cache')
+
+def ensure_cache_directory():
+    """
+    Ensure the cache directory exists.
+    
+    Returns:
+        str: Path to the cache directory
+    """
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    return CACHE_DIR
+
+def generate_image_hash(image_url):
+    """
+    Generate a unique hash for an image URL.
+    
+    Args:
+        image_url (str): URL of the image
+    
+    Returns:
+        str: MD5 hash of the image URL
+    """
+    return hashlib.md5(image_url.encode()).hexdigest()
+
 def get_model():
+    """
+    Lazily load and cache the image segmentation model.
+    
+    Returns:
+        pipeline: Hugging Face image segmentation model
+    """
     if not hasattr(get_model, 'model'):
         print("Loading RMBG-1.4 model...")
         get_model.model = pipeline("image-segmentation", model="briaai/RMBG-1.4", trust_remote_code=True)
         print("Model loaded successfully")
     return get_model.model
 
+def download_image(image_url):
+    """
+    Download an image from a given URL.
+    
+    Args:
+        image_url (str): URL of the image to download
+    
+    Returns:
+        Image: PIL Image object
+    
+    Raises:
+        Exception: If image download fails
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
+    response = requests.get(image_url, headers=headers, timeout=15)
+    
+    if response.status_code != 200:
+        raise Exception(f'Failed to download image, status code: {response.status_code}')
+    
+    input_buffer = io.BytesIO(response.content)
+    return Image.open(input_buffer).convert("RGB")
+
+def process_image_background(input_image, model):
+    """
+    Remove background from an image.
+    
+    Args:
+        input_image (Image): PIL Image to process
+        model (pipeline): Image segmentation model
+    
+    Returns:
+        Image: Processed image with transparent background
+    """
+    pillow_mask = model(input_image, return_mask=True)
+    result_image = input_image.convert("RGBA")
+    result_image.putalpha(pillow_mask)
+    return result_image
+
+def save_processed_image(result_image, cache_path):
+    """
+    Save processed image to cache.
+    
+    Args:
+        result_image (Image): Processed image
+        cache_path (str): Path to save the image
+    """
+    result_image.save(cache_path, format='PNG')
+
 @app.route('/remove-background', methods=['GET'])
-def process_image():
+def remove_background():
+    """
+    Remove background from an image, with caching.
+    
+    Returns:
+        send_file or JSON response
+    """
     try:
-        # Get image URL from query parameter
+        # Validate image URL
         image_url = request.args.get('image')
         if not image_url:
             return jsonify({'error': 'Missing image parameter'}), 400
 
-        print(f"Processing image from URL: {image_url}")
+        # Ensure cache directory exists
+        cache_dir = ensure_cache_directory()
         
-        # Download the image directly using requests
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        response = requests.get(image_url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return jsonify({'error': f'Failed to download image, status code: {response.status_code}'}), 400
-        
-        # Save downloaded image to memory buffer and convert to PIL Image
-        input_buffer = io.BytesIO(response.content)
-        input_image = Image.open(input_buffer).convert("RGB")
-        
-        # Get the model
+        # Generate unique hash for the image
+        image_hash = generate_image_hash(image_url)
+        cache_path = os.path.join(cache_dir, f'{image_hash}_transparent.png')
+
+        # Check if image is already processed
+        if os.path.exists(cache_path):
+            print(f"Serving cached image: {cache_path}")
+            return send_file(cache_path, mimetype='image/png', download_name='transparent-image.png')
+
+        # Download and process image
+        input_image = download_image(image_url)
         model = get_model()
-        
-        # Process with Hugging Face RMBG-1.4 model
-        # Pass the PIL Image to the model
-        pillow_mask = model(input_image, return_mask=True)
-        
-        # Create a new image with the alpha channel
-        result_image = input_image.convert("RGBA")
-        result_image.putalpha(pillow_mask)
-        
-        # Create memory buffer for the output
+        result_image = process_image_background(input_image, model)
+
+        # Save processed image to cache
+        save_processed_image(result_image, cache_path)
+
+        # Create memory buffer for output
         output_buffer = io.BytesIO()
         result_image.save(output_buffer, format='PNG')
         output_buffer.seek(0)
-        
-        # Return the processed image directly
+
         return send_file(output_buffer, mimetype='image/png', download_name='transparent-image.png')
     
     except Exception as e:
