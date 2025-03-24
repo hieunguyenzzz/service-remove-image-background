@@ -15,7 +15,15 @@ def process_image():
         if not image_url:
             return jsonify({'error': 'Missing image parameter'}), 400
 
+        # Get shadow preservation parameters with defaults
+        alpha_matting = request.args.get('alpha_matting', 'true').lower() == 'true'
+        alpha_matting_foreground_threshold = int(request.args.get('foreground_threshold', 240))
+        alpha_matting_background_threshold = int(request.args.get('background_threshold', 10))
+        alpha_matting_erode_size = int(request.args.get('erode_size', 10))
+
         print(f"Processing image from URL: {image_url}")
+        print(f"Alpha matting: {alpha_matting}, fg_threshold: {alpha_matting_foreground_threshold}, " 
+              f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}")
         
         # Download the image directly using requests
         headers = {
@@ -29,8 +37,14 @@ def process_image():
         # Convert the downloaded image to bytes
         input_bytes = response.content
         
-        # Process with rembg
-        output_bytes = rembg.remove(input_bytes)
+        # Process with rembg using alpha matting to preserve shadows
+        output_bytes = rembg.remove(
+            input_bytes,
+            alpha_matting=alpha_matting,
+            alpha_matting_foreground_threshold=alpha_matting_foreground_threshold,
+            alpha_matting_background_threshold=alpha_matting_background_threshold,
+            alpha_matting_erode_size=alpha_matting_erode_size
+        )
         
         # Create memory buffer for the output
         buffer = io.BytesIO(output_bytes)
