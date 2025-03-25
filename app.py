@@ -1,12 +1,17 @@
 import os
 import io
 import requests
+import hashlib
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
 import numpy as np
 from transformers import pipeline
 
 app = Flask(__name__)
+
+# Create cache directory if it doesn't exist
+CACHE_DIR = "image_cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Initialize the Hugging Face pipeline once for reuse
 def get_model():
@@ -16,6 +21,29 @@ def get_model():
         print("Model loaded successfully")
     return get_model.model
 
+def generate_cache_key(url):
+    """Generate a unique cache key for the image URL."""
+    return hashlib.md5(url.encode()).hexdigest()
+
+def get_cache_path(cache_key):
+    """Get the full path to the cached file."""
+    return os.path.join(CACHE_DIR, f"{cache_key}.png")
+
+def is_cached(cache_key):
+    """Check if the image is already cached."""
+    return os.path.exists(get_cache_path(cache_key))
+
+def save_to_cache(image, cache_key):
+    """Save the processed image to cache."""
+    cache_path = get_cache_path(cache_key)
+    image.save(cache_path, format='PNG')
+    print(f"Image saved to cache: {cache_path}")
+
+def load_from_cache(cache_key):
+    """Load an image from cache."""
+    cache_path = get_cache_path(cache_key)
+    return Image.open(cache_path)
+
 @app.route('/remove-background', methods=['GET'])
 def process_image():
     try:
@@ -24,7 +52,19 @@ def process_image():
         if not image_url:
             return jsonify({'error': 'Missing image parameter'}), 400
 
-        print(f"Processing image from URL: {image_url}")
+        # Generate cache key for this URL
+        cache_key = generate_cache_key(image_url)
+        
+        # Check if image is already cached
+        if is_cached(cache_key):
+            print(f"Cache hit for: {image_url}")
+            cached_image = load_from_cache(cache_key)
+            output_buffer = io.BytesIO()
+            cached_image.save(output_buffer, format='PNG')
+            output_buffer.seek(0)
+            return send_file(output_buffer, mimetype='image/png', download_name='transparent-image.png')
+
+        print(f"Cache miss. Processing image from URL: {image_url}")
         
         # Download the image directly using requests
         headers = {
@@ -49,6 +89,9 @@ def process_image():
         # Create a new image with the alpha channel
         result_image = input_image.convert("RGBA")
         result_image.putalpha(pillow_mask)
+        
+        # Save to cache
+        save_to_cache(result_image, cache_key)
         
         # Create memory buffer for the output
         output_buffer = io.BytesIO()
