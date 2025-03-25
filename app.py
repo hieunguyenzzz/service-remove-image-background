@@ -55,11 +55,70 @@ def is_cached(cache_key):
     """Check if the image is already cached."""
     return os.path.exists(get_cache_path(cache_key))
 
+def optimize_image(image):
+    """Perform lossless optimization on the image.
+    
+    Args:
+        image: PIL Image object to optimize
+        
+    Returns:
+        PIL Image object after optimization
+    """
+    # Create a buffer to hold the optimized image
+    buffer = io.BytesIO()
+    
+    # Save with PIL's built-in optimization
+    image.save(buffer, format='PNG', optimize=True)
+    buffer.seek(0)
+    
+    # Return the optimized image
+    return Image.open(buffer)
+
+def scale_image(image, max_dimension=1500):
+    """Scale the image to have a maximum dimension while preserving aspect ratio.
+    
+    Args:
+        image: PIL Image object to scale
+        max_dimension: Maximum width or height in pixels
+        
+    Returns:
+        Scaled PIL Image object
+    """
+    width, height = image.size
+    
+    # If image is already smaller than max dimension, return as is
+    if width <= max_dimension and height <= max_dimension:
+        return image
+    
+    # Calculate new dimensions
+    if width > height:
+        new_width = max_dimension
+        new_height = int((height / width) * max_dimension)
+    else:
+        new_height = max_dimension
+        new_width = int((width / height) * max_dimension)
+    
+    # Resize the image using LANCZOS resampling for best quality
+    return image.resize((new_width, new_height), Image.LANCZOS)
+
 def save_to_cache(image, cache_key):
-    """Save the processed image to cache."""
-    cache_path = get_cache_path(cache_key)
-    image.save(cache_path, format='PNG')
-    print(f"Image saved to cache: {cache_path}")
+    """Save the processed image to cache with scaling and optimization."""
+    try:
+        # Scale the image first
+        scaled_image = scale_image(image, max_dimension=2000)
+        
+        # Optimize the scaled image
+        optimized_image = optimize_image(scaled_image)
+        
+        cache_path = get_cache_path(cache_key)
+        optimized_image.save(cache_path, format='PNG')
+        print(f"Scaled and optimized image saved to cache: {cache_path}")
+    except Exception as e:
+        print(f"Error scaling/optimizing/saving image: {e}")
+        # Fall back to saving the original if scaling/optimization fails
+        cache_path = get_cache_path(cache_key)
+        image.save(cache_path, format='PNG')
+        print(f"Original image saved to cache: {cache_path}")
 
 def load_from_cache(cache_key):
     """Load an image from cache."""
@@ -81,8 +140,12 @@ def process_image():
         if is_cached(cache_key):
             print(f"Cache hit for: {image_url}")
             cached_image = load_from_cache(cache_key)
+            
+            # Scale the image if needed (for backward compatibility with unscaled cached images)
+            scaled_image = scale_image(cached_image, max_dimension=2000)
+            
             output_buffer = io.BytesIO()
-            cached_image.save(output_buffer, format='PNG')
+            scaled_image.save(output_buffer, format='PNG', optimize=True)
             output_buffer.seek(0)
             return send_file(output_buffer, mimetype='image/png', download_name='transparent-image.png')
 
@@ -112,12 +175,14 @@ def process_image():
         result_image = input_image.convert("RGBA")
         result_image.putalpha(pillow_mask)
         
-        # Save to cache
+        # Save to cache (which includes scaling)
         save_to_cache(result_image, cache_key)
         
-        # Create memory buffer for the output
+        # Create memory buffer for the output with scaling and optimization
         output_buffer = io.BytesIO()
-        result_image.save(output_buffer, format='PNG')
+        # Scale and optimize the image for the response
+        scaled_result = scale_image(result_image, max_dimension=1500)
+        scaled_result.save(output_buffer, format='PNG', optimize=True)
         output_buffer.seek(0)
         
         # Return the processed image directly
@@ -137,3 +202,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port) 
+
+# To run with Uvicorn, use:
+# uvicorn --interface wsgi app:app --host 0.0.0.0 --port 8080 
