@@ -1,7 +1,7 @@
 import os
 import io
 import requests
-import hashlib
+import urllib.parse
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
 import numpy as np
@@ -22,8 +22,30 @@ def get_model():
     return get_model.model
 
 def generate_cache_key(url):
-    """Generate a unique cache key for the image URL."""
-    return hashlib.md5(url.encode()).hexdigest()
+    """Generate a unique cache key based on the image filename."""
+    # Extract the filename from the URL
+    parsed_url = urllib.parse.urlparse(url)
+    path = parsed_url.path
+    filename = os.path.basename(path)
+    
+    # If filename is empty, use the last part of the path
+    if not filename:
+        path_parts = path.strip('/').split('/')
+        filename = path_parts[-1] if path_parts else 'default'
+    
+    # If there's still no valid filename, use part of the domain
+    if not filename or filename == '':
+        filename = parsed_url.netloc.replace('.', '_')
+    
+    # Make sure filename doesn't have invalid characters
+    filename = ''.join(c for c in filename if c.isalnum() or c in '_-.')
+    
+    # Append query parameters hash if they exist to ensure uniqueness
+    if parsed_url.query:
+        query_hash = hash(parsed_url.query) % 10000
+        filename = f"{filename}_{query_hash}"
+    
+    return filename
 
 def get_cache_path(cache_key):
     """Get the full path to the cached file."""
