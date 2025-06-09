@@ -164,6 +164,14 @@ def process_image():
         input_buffer = io.BytesIO(response.content)
         input_image = Image.open(input_buffer).convert("RGB")
         
+        # Store the original image in the image_cache folder
+        original_cache_path = os.path.join(CACHE_DIR, f"original_{cache_key}.png")
+        try:
+            input_image.save(original_cache_path, format='PNG')
+            print(f"Original image saved to cache: {original_cache_path}")
+        except Exception as e:
+            print(f"Error saving original image to cache: {e}")
+
         # Get the model
         model = get_model()
         
