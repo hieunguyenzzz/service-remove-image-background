@@ -1,6 +1,7 @@
 import os
 import io
 import requests
+import hashlib
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
 import rembg
@@ -25,18 +26,30 @@ def process_image():
         print(f"Alpha matting: {alpha_matting}, fg_threshold: {alpha_matting_foreground_threshold}, " 
               f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}")
         
+        # Create a cache key based on the URL and processing parameters
+        cache_key = hashlib.md5(f"{image_url}_{alpha_matting}_{alpha_matting_foreground_threshold}_{alpha_matting_background_threshold}_{alpha_matting_erode_size}".encode()).hexdigest()
+        cache_path = os.path.join('image_cache', f"{cache_key}.png")
+
+        # Check if image is already in cache
+        if os.path.exists(cache_path):
+            print(f"Serving cached image: {cache_path}")
+            return send_file(cache_path, mimetype='image/png', download_name='transparent-image.png')
+
+        # Ensure cache directory exists
+        os.makedirs('image_cache', exist_ok=True)
+
         # Download the image directly using requests
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
         response = requests.get(image_url, headers=headers, timeout=15)
-        
+
         if response.status_code != 200:
             return jsonify({'error': f'Failed to download image, status code: {response.status_code}'}), 400
-            
+
         # Convert the downloaded image to bytes
         input_bytes = response.content
-        
+
         # Process with rembg using alpha matting to preserve shadows
         output_bytes = rembg.remove(
             input_bytes,
@@ -45,6 +58,11 @@ def process_image():
             alpha_matting_background_threshold=alpha_matting_background_threshold,
             alpha_matting_erode_size=alpha_matting_erode_size
         )
+
+        # Store processed image in cache
+        with open(cache_path, 'wb') as f:
+            f.write(output_bytes)
+        print(f"Saved processed image to cache: {cache_path}")
         
         # Create memory buffer for the output
         buffer = io.BytesIO(output_bytes)
