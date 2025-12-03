@@ -10,9 +10,9 @@ from rembg import remove, new_session
 app = Flask(__name__)
 
 # Pre-load the rembg model at startup to avoid timeout on first request
-print("Loading rembg model...")
+print("Loading rembg model...", flush=True)
 session = new_session("u2net")
-print("Model loaded successfully")
+print("Model loaded successfully", flush=True)
 
 @app.route('/remove-background', methods=['GET'])
 def process_image():
@@ -28,9 +28,9 @@ def process_image():
         alpha_matting_background_threshold = int(request.args.get('background_threshold', 10))
         alpha_matting_erode_size = int(request.args.get('erode_size', 10))
 
-        print(f"Processing image from URL: {image_url}")
-        print(f"Alpha matting: {alpha_matting}, fg_threshold: {alpha_matting_foreground_threshold}, " 
-              f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}")
+        print(f"Processing image from URL: {image_url}", flush=True)
+        print(f"Alpha matting: {alpha_matting}, fg_threshold: {alpha_matting_foreground_threshold}, "
+              f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}", flush=True)
         
         # Create a cache key based on the URL and processing parameters
         cache_key = hashlib.md5(f"{image_url}_{alpha_matting}_{alpha_matting_foreground_threshold}_{alpha_matting_background_threshold}_{alpha_matting_erode_size}".encode()).hexdigest()
@@ -38,14 +38,14 @@ def process_image():
 
         # Check if image is already in cache
         if os.path.exists(cache_path):
-            print(f"Serving cached image: {cache_path}")
+            print(f"Serving cached image: {cache_path}", flush=True)
             return send_file(cache_path, mimetype='image/png', download_name='transparent-image.png')
 
         # Ensure cache directory exists
         os.makedirs('image_cache', exist_ok=True)
 
         # Download the image directly using requests
-        print(f"Downloading image...")
+        print(f"Downloading image...", flush=True)
         download_start = time.time()
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -57,10 +57,10 @@ def process_image():
 
         # Convert the downloaded image to bytes
         input_bytes = response.content
-        print(f"Download complete ({len(input_bytes) / 1024:.1f} KB) in {time.time() - download_start:.2f}s")
+        print(f"Download complete ({len(input_bytes) / 1024:.1f} KB) in {time.time() - download_start:.2f}s", flush=True)
 
         # Process with rembg using alpha matting to preserve shadows
-        print(f"Removing background...")
+        print(f"Removing background...", flush=True)
         process_start = time.time()
         output_bytes = remove(
             input_bytes,
@@ -70,12 +70,12 @@ def process_image():
             alpha_matting_background_threshold=alpha_matting_background_threshold,
             alpha_matting_erode_size=alpha_matting_erode_size
         )
-        print(f"Background removal complete in {time.time() - process_start:.2f}s")
+        print(f"Background removal complete in {time.time() - process_start:.2f}s", flush=True)
 
         # Store processed image in cache
         with open(cache_path, 'wb') as f:
             f.write(output_bytes)
-        print(f"Saved processed image to cache: {cache_path} ({len(output_bytes) / 1024:.1f} KB)")
+        print(f"Saved processed image to cache: {cache_path} ({len(output_bytes) / 1024:.1f} KB)", flush=True)
         
         # Create memory buffer for the output
         buffer = io.BytesIO(output_bytes)
@@ -85,7 +85,7 @@ def process_image():
         return send_file(buffer, mimetype='image/png', download_name='transparent-image.png')
     
     except Exception as e:
-        print(f"Error processing request: {e}")
+        print(f"Error processing request: {e}", flush=True)
         return jsonify({'error': str(e)}), 500
 
 # Simpler testing endpoint
