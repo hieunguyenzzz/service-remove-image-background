@@ -35,29 +35,40 @@ The API exposes a single endpoint at `/remove-background` that accepts GET reque
 ### Parameters
 
 - `image` (required): URL of the image to process
-- `alpha_matting` (optional): Set to 'true' or 'false' to enable/disable alpha matting for shadow preservation (default: 'true')
-- `foreground_threshold` (optional): Alpha matting foreground threshold (0-255, default: 240)
+- `alpha_matting` (optional): Enable/disable alpha matting for shadow preservation (default: 'true')
+- `foreground_threshold` (optional): Alpha matting foreground threshold, higher = preserve more product (0-255, default: 250)
 - `background_threshold` (optional): Alpha matting background threshold (0-255, default: 10)
-- `erode_size` (optional): Alpha matting erode size (default: 10)
+- `erode_size` (optional): Alpha matting erode size, lower = less edge erosion (default: 5)
+- `post_process_mask` (optional): Enable mask post-processing for better product preservation (default: 'true')
 
 ### Example with curl
 
 ```bash
-# Basic usage
+# Basic usage (uses conservative defaults to preserve product)
 curl -X GET \
   "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg"
 
-# With shadow preservation parameters
+# More aggressive removal (if too much background remains)
 curl -X GET \
-  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg&alpha_matting=true&foreground_threshold=240&background_threshold=10&erode_size=10"
+  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg&foreground_threshold=240&erode_size=10"
+
+# Maximum product preservation (if product is being cut off)
+curl -X GET \
+  "http://localhost:8080/remove-background?image=https://example.com/furniture-image.jpg&foreground_threshold=260&erode_size=3"
 ```
 
 The API will return the processed image with a transparent background directly in the response (no need to save to a file).
 
-### Tips for Shadow Preservation
+### Tips for Tuning
 
-- Use `alpha_matting=true` to preserve shadows
-- Adjust `foreground_threshold` and `background_threshold` to fine-tune the shadow effect:
-  - Lower `foreground_threshold` to include more of the shadows
-  - Higher `background_threshold` to keep more shadow details
-- If shadows appear fragmented, try increasing `erode_size` 
+**If product is being cut off:**
+- Increase `foreground_threshold` (e.g., 260)
+- Decrease `erode_size` (e.g., 3)
+
+**If too much background remains:**
+- Decrease `foreground_threshold` (e.g., 230)
+- Increase `erode_size` (e.g., 15)
+
+**For shadow preservation:**
+- Keep `alpha_matting=true`
+- Adjust `background_threshold` to control shadow opacity 

@@ -24,16 +24,18 @@ def process_image():
 
         # Get shadow preservation parameters with defaults
         alpha_matting = request.args.get('alpha_matting', 'true').lower() == 'true'
-        alpha_matting_foreground_threshold = int(request.args.get('foreground_threshold', 240))
+        alpha_matting_foreground_threshold = int(request.args.get('foreground_threshold', 250))
         alpha_matting_background_threshold = int(request.args.get('background_threshold', 10))
-        alpha_matting_erode_size = int(request.args.get('erode_size', 10))
+        alpha_matting_erode_size = int(request.args.get('erode_size', 5))
+        post_process_mask = request.args.get('post_process_mask', 'true').lower() == 'true'
 
         print(f"Processing image from URL: {image_url}", flush=True)
         print(f"Alpha matting: {alpha_matting}, fg_threshold: {alpha_matting_foreground_threshold}, "
-              f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}", flush=True)
+              f"bg_threshold: {alpha_matting_background_threshold}, erode_size: {alpha_matting_erode_size}, "
+              f"post_process_mask: {post_process_mask}", flush=True)
         
         # Create a cache key based on the URL and processing parameters
-        cache_key = hashlib.md5(f"{image_url}_{alpha_matting}_{alpha_matting_foreground_threshold}_{alpha_matting_background_threshold}_{alpha_matting_erode_size}".encode()).hexdigest()
+        cache_key = hashlib.md5(f"{image_url}_{alpha_matting}_{alpha_matting_foreground_threshold}_{alpha_matting_background_threshold}_{alpha_matting_erode_size}_{post_process_mask}".encode()).hexdigest()
         cache_path = os.path.join('image_cache', f"{cache_key}.png")
 
         # Check if image is already in cache
@@ -68,7 +70,8 @@ def process_image():
             alpha_matting=alpha_matting,
             alpha_matting_foreground_threshold=alpha_matting_foreground_threshold,
             alpha_matting_background_threshold=alpha_matting_background_threshold,
-            alpha_matting_erode_size=alpha_matting_erode_size
+            alpha_matting_erode_size=alpha_matting_erode_size,
+            post_process_mask=post_process_mask
         )
         print(f"Background removal complete in {time.time() - process_start:.2f}s", flush=True)
 
