@@ -1,5 +1,6 @@
 import os
 import io
+import time
 import requests
 import hashlib
 from flask import Flask, request, send_file, jsonify
@@ -44,6 +45,8 @@ def process_image():
         os.makedirs('image_cache', exist_ok=True)
 
         # Download the image directly using requests
+        print(f"Downloading image...")
+        download_start = time.time()
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
@@ -54,8 +57,11 @@ def process_image():
 
         # Convert the downloaded image to bytes
         input_bytes = response.content
+        print(f"Download complete ({len(input_bytes) / 1024:.1f} KB) in {time.time() - download_start:.2f}s")
 
         # Process with rembg using alpha matting to preserve shadows
+        print(f"Removing background...")
+        process_start = time.time()
         output_bytes = remove(
             input_bytes,
             session=session,
@@ -64,11 +70,12 @@ def process_image():
             alpha_matting_background_threshold=alpha_matting_background_threshold,
             alpha_matting_erode_size=alpha_matting_erode_size
         )
+        print(f"Background removal complete in {time.time() - process_start:.2f}s")
 
         # Store processed image in cache
         with open(cache_path, 'wb') as f:
             f.write(output_bytes)
-        print(f"Saved processed image to cache: {cache_path}")
+        print(f"Saved processed image to cache: {cache_path} ({len(output_bytes) / 1024:.1f} KB)")
         
         # Create memory buffer for the output
         buffer = io.BytesIO(output_bytes)
