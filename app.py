@@ -4,9 +4,14 @@ import requests
 import hashlib
 from flask import Flask, request, send_file, jsonify
 from PIL import Image
-import rembg
+from rembg import remove, new_session
 
 app = Flask(__name__)
+
+# Pre-load the rembg model at startup to avoid timeout on first request
+print("Loading rembg model...")
+session = new_session("u2net")
+print("Model loaded successfully")
 
 @app.route('/remove-background', methods=['GET'])
 def process_image():
@@ -51,8 +56,9 @@ def process_image():
         input_bytes = response.content
 
         # Process with rembg using alpha matting to preserve shadows
-        output_bytes = rembg.remove(
+        output_bytes = remove(
             input_bytes,
+            session=session,
             alpha_matting=alpha_matting,
             alpha_matting_foreground_threshold=alpha_matting_foreground_threshold,
             alpha_matting_background_threshold=alpha_matting_background_threshold,

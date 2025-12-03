@@ -13,4 +13,4 @@ COPY app.py .
 EXPOSE 80
 
 # Run the application with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:80", "--timeout", "300", "--workers", "1", "--preload", "app:app"] 
